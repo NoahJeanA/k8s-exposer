@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: minecraft
+  namespace: default
+  annotations:
+    expose.neverup.at/subdomain: "minecraft"
+    expose.neverup.at/ports: "25565/tcp,25565/udp"
+spec:
+  selector:
+    app: minecraft
+  ports:
+  - name: game-tcp
+    port: 25565
+    targetPort: 25565
+    protocol: TCP
+  - name: game-udp
+    port: 25565
+    targetPort: 25565
+    protocol: UDP
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: minecraft
+  namespace: default
+  labels:
+    app: minecraft
+spec:
+  containers:
+  - name: minecraft
+    image: itzg/minecraft-server:latest
+    env:
+    - name: EULA
+      value: "TRUE"
+    - name: TYPE
+      value: "VANILLA"
+    ports:
+    - containerPort: 25565
+      protocol: TCP
+    - containerPort: 25565
+      protocol: UDP

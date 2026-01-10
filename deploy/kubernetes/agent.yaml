@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-exposer-agent
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-exposer-agent
+  template:
+    metadata:
+      labels:
+        app: k8s-exposer-agent
+    spec:
+      serviceAccountName: k8s-exposer-agent
+      containers:
+      - name: agent
+        image: ghcr.io/noahjeana/k8s-exposer-agent:latest
+        imagePullPolicy: Always
+        env:
+        - name: SERVER_ADDR
+          value: "10.0.0.1:9090"
+        - name: CLUSTER_DOMAIN
+          value: "neverup.at"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: SYNC_INTERVAL
+          value: "30s"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
