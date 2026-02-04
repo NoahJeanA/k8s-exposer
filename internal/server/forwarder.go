@@ -70,20 +70,42 @@ func (f *Forwarder) ForwardTCP(client net.Conn, targetIP string, targetPort int3
 
 	f.logger.Debug("TCP connection established", "target", fmt.Sprintf("%s:%d", targetIP, targetPort))
 
-	// Bidirectional copy with larger buffer
+	// Bidirectional copy with manual buffering (avoid splice syscall for WireGuard compatibility)
 	errCh := make(chan error, 2)
-	buf1 := make([]byte, 128*1024) // 128KB buffer
-	buf2 := make([]byte, 128*1024) // 128KB buffer
+
+	// Manual copy function to avoid splice
+	copyWithBuffer := func(dst, src net.Conn, buf []byte) error {
+		for {
+			nr, er := src.Read(buf)
+			if nr > 0 {
+				nw, ew := dst.Write(buf[0:nr])
+				if ew != nil {
+					return ew
+				}
+				if nr != nw {
+					return io.ErrShortWrite
+				}
+			}
+			if er != nil {
+				if er != io.EOF {
+					return er
+				}
+				return nil
+			}
+		}
+	}
 
 	// Client -> Target
 	go func() {
-		_, err := io.CopyBuffer(target, client, buf1)
+		buf := make([]byte, 256*1024) // 256KB buffer
+		err := copyWithBuffer(target, client, buf)
 		errCh <- err
 	}()
 
 	// Target -> Client
 	go func() {
-		_, err := io.CopyBuffer(client, target, buf2)
+		buf := make([]byte, 256*1024) // 256KB buffer
+		err := copyWithBuffer(client, target, buf)
 		errCh <- err
 	}()
 
