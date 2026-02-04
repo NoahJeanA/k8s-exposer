@@ -19,6 +19,11 @@ global
     group haproxy
     daemon
 
+    # Performance tuning
+    maxconn 10000
+    tune.bufsize 32768
+    tune.maxrewrite 8192
+
     # Default SSL material locations
     ca-base /etc/ssl/certs
     crt-base /etc/ssl/private
