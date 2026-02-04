@@ -94,7 +94,11 @@ backend backend_default
 # Backend for {{.Name}} (port {{.Port}})
 backend backend_{{.Port}}
     mode http
-    option httpchk GET /
+    {{if eq .Port 2283}}# Connection limit for Immich uploads (max 3 concurrent per IP)
+    stick-table type ip size 100k expire 30s store conn_cur
+    acl too_many_uploads src_conn_cur gt 3
+    http-request deny deny_status 429 if too_many_uploads
+    {{end}}option httpchk GET /
     http-check expect status 200-499
     server {{.Name}} localhost:{{.Port}} check inter 5s fall 3 rise 2
 {{end}}
