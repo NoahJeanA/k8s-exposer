@@ -198,6 +198,18 @@ func (r *ServiceRegistry) GetService(subdomain string) (*types.ExposedService, b
 	return svc, exists
 }
 
+// GetServices returns all currently registered services
+func (r *ServiceRegistry) GetServices() []types.ExposedService {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	services := make([]types.ExposedService, 0, len(r.services))
+	for _, svc := range r.services {
+		services = append(services, *svc)
+	}
+	return services
+}
+
 // portKey creates a unique key for port and protocol
 func (r *ServiceRegistry) portKey(port int32, protocol string) string {
 	return fmt.Sprintf("%d:%s", port, protocol)
@@ -212,7 +224,9 @@ func (r *ServiceRegistry) servicesEqual(a, b *types.ExposedService) bool {
 		return false
 	}
 	for i := range a.Ports {
-		if a.Ports[i].Port != b.Ports[i].Port || a.Ports[i].Protocol != b.Ports[i].Protocol {
+		if a.Ports[i].Port != b.Ports[i].Port || 
+			a.Ports[i].TargetPort != b.Ports[i].TargetPort ||
+			a.Ports[i].Protocol != b.Ports[i].Protocol {
 			return false
 		}
 	}

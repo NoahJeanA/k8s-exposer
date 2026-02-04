@@ -9,7 +9,10 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
+	"github.com/noahjeana/k8s-exposer/internal/api"
+	"github.com/noahjeana/k8s-exposer/internal/automation"
 	"github.com/noahjeana/k8s-exposer/internal/protocol"
 	"github.com/noahjeana/k8s-exposer/internal/server"
 	"github.com/noahjeana/k8s-exposer/pkg/types"
@@ -18,15 +21,26 @@ import (
 func main() {
 	// Parse environment variables
 	listenAddr := getEnv("EXPOSER_LISTEN_ADDR", "10.0.0.1:9090")
+	apiListenAddr := getEnv("EXPOSER_API_LISTEN_ADDR", "0.0.0.0:8090")
 	logLevel := getEnv("EXPOSER_LOG_LEVEL", "INFO")
 	wireguardInterface := getEnv("EXPOSER_WIREGUARD_INTERFACE", "wg0")
 	portRangeStart := getEnvInt32("EXPOSER_PORT_RANGE_START", 30000)
 	portRangeEnd := getEnvInt32("EXPOSER_PORT_RANGE_END", 32767)
 
+	// Automation configuration
+	domain := getEnv("DOMAIN", "neverup.at")
+	haproxySocket := getEnv("HAPROXY_SOCKET", "/var/run/haproxy.sock")
+	haproxyMap := getEnv("HAPROXY_MAP", "/etc/haproxy/domains.map")
+	haproxyConfig := getEnv("HAPROXY_CONFIG", "/etc/haproxy/haproxy.cfg")
+	firewallToken := getEnv("HETZNER_CLOUD_TOKEN", "")
+	firewallID := getEnv("HETZNER_FIREWALL_ID", "")
+	reconcileInterval := getEnvDuration("RECONCILE_INTERVAL", 30*time.Second)
+
 	// Setup logger
 	logger := setupLogger(logLevel)
 	logger.Info("Starting k8s-exposer server",
 		"listen_addr", listenAddr,
+		"api_listen_addr", apiListenAddr,
 		"wireguard_interface", wireguardInterface,
 		"port_range", fmt.Sprintf("%d-%d", portRangeStart, portRangeEnd))
 
@@ -50,6 +64,38 @@ func main() {
 	// Initialize service registry
 	registry := server.NewServiceRegistry(portRangeStart, portRangeEnd, forwarder, logger)
 	defer registry.Close()
+
+	// Initialize automation controller
+	automationConfig := automation.Config{
+		HAProxySocket:     haproxySocket,
+		HAProxyMap:        haproxyMap,
+		HAProxyConfig:     haproxyConfig,
+		FirewallToken:     firewallToken,
+		FirewallID:        firewallID,
+		Domain:            domain,
+		ReconcileInterval: reconcileInterval,
+	}
+	automationController := automation.NewController(automationConfig, logger)
+
+	// Start automation controller in background
+	go func() {
+		logger.Info("Starting automation controller")
+		if err := automationController.Run(ctx, func() []types.ExposedService {
+			return registry.GetServices()
+		}); err != nil && err != context.Canceled {
+			logger.Error("Automation controller failed", "error", err)
+		}
+	}()
+
+	// Start new API server in background
+	apiServer := api.NewServer(registry, automationController, logger)
+	go func() {
+		logger.Info("Starting API server", "addr", apiListenAddr)
+		if err := apiServer.Start(apiListenAddr); err != nil {
+			logger.Error("API server failed", "error", err)
+			cancel() // Stop the whole server if API fails
+		}
+	}()
 
 	// Start listening for agent connections
 	listener, err := net.Listen("tcp", listenAddr)
@@ -150,6 +196,15 @@ func getEnvInt32(key string, defaultValue int32) int32 {
 	if value := os.Getenv(key); value != "" {
 		if intVal, err := strconv.ParseInt(value, 10, 32); err == nil {
 			return int32(intVal)
+		}
+	}
+	return defaultValue
+}
+
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
 		}
 	}
 	return defaultValue

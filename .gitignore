@@ -1,35 +1,32 @@
 # Binaries
-build/
+k8s-exposer-agent
+k8s-exposer-server
+k8s-exposer-cli
+
+# Build artifacts
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool
-*.out
-
-# Dependency directories
+# Go
 vendor/
-
-# Go workspace file
-go.work
-
-# Environment files
-.env
-*.env
-!.env.example
+*.sum
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+
+# Temp
+tmp/
+.tmp/

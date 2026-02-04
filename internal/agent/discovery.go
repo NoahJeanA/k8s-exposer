@@ -28,7 +28,7 @@ func DiscoverServices(ctx context.Context, clientset kubernetes.Interface, logge
 
 	var exposedServices []types.ExposedService
 	for _, svc := range serviceList.Items {
-		exposedSvc, err := extractServiceInfo(&svc)
+		exposedSvc, err := extractServiceInfo(clientset, &svc)
 		if err != nil {
 			// Skip services without annotations or with invalid configuration
 			logger.Debug("Skipping service", "name", svc.Name, "namespace", svc.Namespace, "error", err)
@@ -44,7 +44,7 @@ func DiscoverServices(ctx context.Context, clientset kubernetes.Interface, logge
 }
 
 // extractServiceInfo extracts exposed service information from a Kubernetes service
-func extractServiceInfo(svc *corev1.Service) (*types.ExposedService, error) {
+func extractServiceInfo(clientset kubernetes.Interface, svc *corev1.Service) (*types.ExposedService, error) {
 	// Check if service has required annotations
 	subdomain, hasSubdomain := svc.Annotations[SubdomainAnnotation]
 	portsAnnotation, hasPorts := svc.Annotations[PortsAnnotation]
@@ -54,29 +54,55 @@ func extractServiceInfo(svc *corev1.Service) (*types.ExposedService, error) {
 	}
 
 	// Parse ports annotation
-	ports, err := parsePorts(portsAnnotation)
+	requestedPorts, err := parsePorts(portsAnnotation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ports annotation: %w", err)
 	}
 
-	// Get target IP (ClusterIP)
-	targetIP := svc.Spec.ClusterIP
-	if targetIP == "" || targetIP == "None" {
-		return nil, fmt.Errorf("service has no ClusterIP")
+	// Get endpoints to find pod IPs (pod IPs are routable over WireGuard, ClusterIPs are not)
+	endpoints, err := clientset.CoreV1().Endpoints(svc.Namespace).Get(context.Background(), svc.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get endpoints: %w", err)
 	}
 
-	// Get NodeIP if available (for NodePort services)
-	nodeIP := ""
-	// NodeIP would be discovered from the node, but for simplicity we'll leave it empty
-	// The server can use the ClusterIP over Wireguard
+	// Get first ready pod IP from endpoints
+	var podIP string
+	if len(endpoints.Subsets) > 0 && len(endpoints.Subsets[0].Addresses) > 0 {
+		podIP = endpoints.Subsets[0].Addresses[0].IP
+	}
+	
+	if podIP == "" {
+		return nil, fmt.Errorf("no ready pods found for service")
+	}
+	
+	var ports []types.PortMapping
+	
+	// Map requested external ports to endpoint ports
+	for _, requestedPort := range requestedPorts {
+		// Use the first endpoint port as the target (most services have only one port)
+		if len(endpoints.Subsets) > 0 && len(endpoints.Subsets[0].Ports) > 0 {
+			endpointPort := endpoints.Subsets[0].Ports[0].Port
+			
+			ports = append(ports, types.PortMapping{
+				Port:       requestedPort.Port, // External port (e.g., 8080)
+				TargetPort: endpointPort,        // Pod port from endpoint (e.g., 80)
+				Protocol:   requestedPort.Protocol,
+			})
+			break // Only process first requested port for now
+		}
+	}
+
+	if len(ports) == 0 {
+		return nil, fmt.Errorf("no valid ports found for service")
+	}
 
 	exposedSvc := &types.ExposedService{
 		Name:      svc.Name,
 		Namespace: svc.Namespace,
 		Subdomain: subdomain,
 		Ports:     ports,
-		TargetIP:  targetIP,
-		NodeIP:    nodeIP,
+		TargetIP:  podIP, // Use pod IP for direct routing over WireGuard
+		NodeIP:    podIP,
 	}
 
 	// Validate the service

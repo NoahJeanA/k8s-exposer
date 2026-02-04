@@ -84,7 +84,7 @@ func (w *ServiceWatcher) handleChange(ctx context.Context) {
 
 // parseServiceAnnotations parses service annotations and returns an ExposedService
 func (w *ServiceWatcher) parseServiceAnnotations(svc *corev1.Service) (*types.ExposedService, error) {
-	return extractServiceInfo(svc)
+	return extractServiceInfo(w.clientset, svc)
 }
 
 // StartWithRetry starts the service watcher with retry logic

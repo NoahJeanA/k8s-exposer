@@ -50,6 +50,9 @@ func (f *Forwarder) ForwardTCP(client net.Conn, targetIP string, targetPort int3
 		// Disable deadlines for long uploads
 		tcpConn.SetReadDeadline(time.Time{})
 		tcpConn.SetWriteDeadline(time.Time{})
+		// Set socket buffers
+		tcpConn.SetReadBuffer(1 * 1024 * 1024)  // 1MB
+		tcpConn.SetWriteBuffer(1 * 1024 * 1024) // 1MB
 	}
 
 	// Dial target via Wireguard interface
@@ -66,6 +69,9 @@ func (f *Forwarder) ForwardTCP(client net.Conn, targetIP string, targetPort int3
 		// Disable deadlines for long uploads
 		tcpConn.SetReadDeadline(time.Time{})
 		tcpConn.SetWriteDeadline(time.Time{})
+		// Set socket buffers
+		tcpConn.SetReadBuffer(1 * 1024 * 1024)  // 1MB
+		tcpConn.SetWriteBuffer(1 * 1024 * 1024) // 1MB
 	}
 
 	f.logger.Debug("TCP connection established", "target", fmt.Sprintf("%s:%d", targetIP, targetPort))
@@ -97,14 +103,14 @@ func (f *Forwarder) ForwardTCP(client net.Conn, targetIP string, targetPort int3
 
 	// Client -> Target
 	go func() {
-		buf := make([]byte, 256*1024) // 256KB buffer
+		buf := make([]byte, 64*1024) // 64KB buffer (optimal for most networks)
 		err := copyWithBuffer(target, client, buf)
 		errCh <- err
 	}()
 
 	// Target -> Client
 	go func() {
-		buf := make([]byte, 256*1024) // 256KB buffer
+		buf := make([]byte, 64*1024) // 64KB buffer
 		err := copyWithBuffer(client, target, buf)
 		errCh <- err
 	}()

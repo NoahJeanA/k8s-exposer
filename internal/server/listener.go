@@ -219,6 +219,10 @@ func (pl *PortListener) getTargetPort() int32 {
 	// Find the matching port in the target service
 	for _, portMapping := range pl.target.Ports {
 		if portMapping.Protocol == pl.protocol || portMapping.Protocol == "tcp+udp" {
+			// Use TargetPort if available (for NodePort services), otherwise use Port
+			if portMapping.TargetPort != 0 {
+				return portMapping.TargetPort
+			}
 			return portMapping.Port
 		}
 	}

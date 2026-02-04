@@ -1,351 +1,183 @@
 # k8s-exposer
 
-A Go-based service exposer that makes Kubernetes services accessible from the internet via a Hetzner server using Wireguard VPN and subdomain-based routing.
+**Kubernetes Service Exposer** - Automatically expose Kubernetes services via WireGuard with HAProxy load balancing.
+
+## Features
+
+✅ **Automatic Service Discovery** - Annotate services, get instant exposure  
+✅ **Pod-IP Forwarding** - Direct routing to pods via WireGuard  
+✅ **HAProxy Integration** - Automatic backend generation and domain routing  
+✅ **Firewall Management** - Auto-open ports (Hetzner Cloud)  
+✅ **Zero Dependencies** - Single static Go binary  
+✅ **Production Ready** - Systemd integration, graceful shutdown  
+
+## Quick Start
+
+### 1. Deploy Agent in Kubernetes
+
+```bash
+kubectl apply -f deploy/agent.yaml
+```
+
+### 2. Install Server on Edge Node
+
+```bash
+# Download binary
+wget https://github.com/noahjeana/k8s-exposer/releases/latest/k8s-exposer-server
+
+# Install
+sudo mv k8s-exposer-server /usr/local/bin/
+sudo chmod +x /usr/local/bin/k8s-exposer-server
+
+# Configure systemd
+sudo systemctl enable k8s-exposer
+sudo systemctl start k8s-exposer
+```
+
+### 3. Expose a Service
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app
+  annotations:
+    expose.neverup.at/subdomain: "app"
+    expose.neverup.at/ports: "8080/tcp"
+spec:
+  selector:
+    app: my-app
+  ports:
+    - port: 8080
+      targetPort: 80
+```
+
+**Done!** Your service is now available at `app.neverup.at`
 
 ## Architecture
 
 ```
-Internet → Hetzner Server (Public IP) → Wireguard VPN (10.0.0.0/24) → K8s Cluster (Home)
-```
-
-### Components
-
-1. **k8s-exposer-server**: Binary running on Hetzner (10.0.0.1)
-   - Receives service configurations from agent
-   - Opens dynamic ports for each service
-   - Forwards traffic over Wireguard to K8s services
-
-2. **k8s-exposer-agent**: Deployment in K8s cluster
-   - Watches K8s API for annotated services
-   - Sends service updates to server
-   - Maintains persistent connection with heartbeat
-
-## Prerequisites
-
-- Go 1.21 or later
-- Kubernetes cluster with kubectl access
-- Hetzner server (or any VPS) with public IP
-- Wireguard VPN configured between server and K8s cluster
-- Docker (for building container images)
-
-## Installation
-
-### 1. Build Binaries
-
-```bash
-# Clone the repository
-git clone https://github.com/noahjeana/k8s-exposer.git
-cd k8s-exposer
-
-# Build both server and agent
-make build
-
-# Or build individually
-make build-server
-make build-agent
-```
-
-### 2. Deploy Server to Hetzner
-
-```bash
-# Copy environment configuration
-cp configs/.env.example /etc/k8s-exposer/.env
-
-# Edit the configuration
-nano /etc/k8s-exposer/.env
-
-# Create working directory
-mkdir -p /var/lib/k8s-exposer
-
-# Deploy using Makefile (requires SSH access configured)
-make deploy-server
-
-# Or manually
-scp build/k8s-exposer-server root@hetzner:/usr/local/bin/
-scp deploy/systemd/k8s-exposer.service root@hetzner:/etc/systemd/system/
-ssh root@hetzner "systemctl daemon-reload && systemctl enable k8s-exposer && systemctl start k8s-exposer"
-```
-
-### 3. Deploy Agent to Kubernetes
-
-```bash
-# Deploy RBAC and agent
-make deploy-agent
-
-# Or manually
-kubectl apply -f deploy/kubernetes/rbac.yaml
-kubectl apply -f deploy/kubernetes/agent.yaml
-
-# Check agent logs
-kubectl logs -n kube-system -l app=k8s-exposer-agent -f
+Internet → HAProxy → k8s-exposer-server → WireGuard → Kubernetes Pods
 ```
 
 ## Configuration
 
 ### Server Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EXPOSER_LISTEN_ADDR` | `10.0.0.1:9090` | Address to listen for agent connections |
-| `EXPOSER_LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
-| `EXPOSER_WIREGUARD_INTERFACE` | `wg0` | Wireguard interface name |
-| `EXPOSER_PORT_RANGE_START` | `30000` | Start of dynamic port allocation range |
-| `EXPOSER_PORT_RANGE_END` | `32767` | End of dynamic port allocation range |
-
-### Agent Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SERVER_ADDR` | `10.0.0.1:9090` | Server address |
-| `CLUSTER_DOMAIN` | `neverup.at` | Domain for services |
-| `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
-| `SYNC_INTERVAL` | `30s` | Full sync interval |
-| `WATCH_NAMESPACES` | *(all)* | Comma-separated namespaces to watch |
-
-## Usage
-
-### Exposing a Kubernetes Service
-
-To expose a Kubernetes service, add the following annotations:
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: minecraft
-  namespace: default
-  annotations:
-    expose.neverup.at/subdomain: "minecraft"
-    expose.neverup.at/ports: "25565/tcp,25565/udp"
-spec:
-  selector:
-    app: minecraft
-  ports:
-  - name: game-tcp
-    port: 25565
-    targetPort: 25565
-    protocol: TCP
-  - name: game-udp
-    port: 25565
-    targetPort: 25565
-    protocol: UDP
+```bash
+EXPOSER_LISTEN_ADDR=10.0.0.1:9090          # Agent connection endpoint
+EXPOSER_API_LISTEN_ADDR=0.0.0.0:8090       # REST API endpoint
+DOMAIN=neverup.at                          # Your domain
+HAPROXY_SOCKET=/var/run/haproxy.sock       # HAProxy admin socket
+HAPROXY_MAP=/etc/haproxy/domains.map       # Domain mapping file
+HAPROXY_CONFIG=/etc/haproxy/haproxy.cfg    # HAProxy config (auto-generated)
+RECONCILE_INTERVAL=30s                     # Automation interval
 ```
 
-### Annotations
+### Optional: Firewall Automation
 
-- **`expose.neverup.at/subdomain`** (required): Defines the subdomain for the service
-  - Must be a valid DNS label (lowercase alphanumeric and hyphens)
-  - Example: `minecraft`, `web-app`, `api`
-
-- **`expose.neverup.at/ports`** (required): Defines ports to expose
-  - Format: `port/protocol[,port/protocol...]`
-  - Protocol can be: `tcp`, `udp`, or `tcp+udp`
-  - Example: `80/tcp`, `25565/tcp,25565/udp`, `53/tcp+udp`
-
-### DNS Configuration
-
-After deploying a service, create a DNS A record pointing to your Hetzner server:
-
-```
-minecraft.neverup.at → <HETZNER_PUBLIC_IP>
+```bash
+HETZNER_CLOUD_TOKEN=your_token             # Hetzner Cloud API token
+HETZNER_FIREWALL_ID=your_firewall_id       # Firewall ID
 ```
 
-## Example Services
+## API
 
-### Simple HTTP Service
+k8s-exposer provides a REST API for monitoring and management.
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: nginx
-  annotations:
-    expose.neverup.at/subdomain: "web"
-    expose.neverup.at/ports: "80/tcp"
-spec:
-  selector:
-    app: nginx
-  ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
+**Base URL:** `http://server:8090/api/v1`
+
+### Endpoints
+
+```bash
+# System health
+curl http://localhost:8090/api/v1/health
+
+# System metrics
+curl http://localhost:8090/api/v1/metrics
+
+# List services
+curl http://localhost:8090/api/v1/services
+
+# Get service details
+curl http://localhost:8090/api/v1/services/nginx-test
+
+# Force reconciliation
+curl -X POST http://localhost:8090/api/v1/sync
 ```
 
-### Game Server (TCP + UDP)
+See [API Documentation](api-documentation.md) for complete reference.
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: valheim
-  annotations:
-    expose.neverup.at/subdomain: "valheim"
-    expose.neverup.at/ports: "2456/tcp+udp,2457/tcp+udp,2458/tcp+udp"
-spec:
-  selector:
-    app: valheim
-  ports:
-  - name: game1
-    port: 2456
-    protocol: TCP
-  - name: game2
-    port: 2457
-    protocol: TCP
-  - name: game3
-    port: 2458
-    protocol: TCP
+## CLI Tool
+
+k8s-exposer includes a professional CLI for management and monitoring.
+
+### Installation
+
+```bash
+# Build from source
+CGO_ENABLED=0 go build -o k8s-exposer ./cmd/cli
+
+# Install to system
+sudo mv k8s-exposer /usr/local/bin/
 ```
 
-## Troubleshooting
+### Usage
 
-### Agent not connecting to server
+```bash
+# Show system status
+k8s-exposer --server http://your-server:8090 status
 
-1. Check agent logs:
-   ```bash
-   kubectl logs -n kube-system -l app=k8s-exposer-agent
-   ```
+# List exposed services
+k8s-exposer services
 
-2. Verify Wireguard connectivity:
-   ```bash
-   # From K8s cluster
-   ping 10.0.0.1
-   ```
+# Get service details
+k8s-exposer services get nginx-test
 
-3. Check server logs:
-   ```bash
-   journalctl -u k8s-exposer -f
-   ```
+# Show system metrics
+k8s-exposer metrics
 
-### Services not being discovered
+# Force reconciliation
+k8s-exposer sync
 
-1. Check if annotations are correct:
-   ```bash
-   kubectl get svc -A -o yaml | grep "expose.neverup.at"
-   ```
+# Version info
+k8s-exposer version
 
-2. Verify RBAC permissions:
-   ```bash
-   kubectl auth can-i list services --as=system:serviceaccount:kube-system:k8s-exposer-agent
-   ```
+# JSON output for scripting
+k8s-exposer --json services
+```
 
-3. Check agent logs for errors
+See [CLI Documentation](CLI.md) for complete reference.
 
-### Port conflicts
+## Requirements
 
-If a port is already in use, the server will automatically allocate an alternative port from the dynamic range (30000-32767). Check server logs for the allocated port.
-
-### Traffic not reaching pods
-
-1. Verify service ClusterIP is accessible from the server over Wireguard:
-   ```bash
-   # From Hetzner server
-   curl http://<ClusterIP>:<port>
-   ```
-
-2. Check listener status in server logs
-
-3. Verify firewall rules on Hetzner server
+- **Kubernetes 1.20+**
+- **WireGuard** configured between edge node and cluster
+- **HAProxy 2.0+** on edge node
+- **Go 1.21+** (for building from source)
 
 ## Development
 
-### Running Tests
+### Build
 
 ```bash
-make test
+# Build agent
+CGO_ENABLED=0 go build -o k8s-exposer-agent ./cmd/agent
+
+# Build server
+CGO_ENABLED=0 go build -o k8s-exposer-server ./cmd/server
 ```
 
-### Building Docker Images
+### Test
 
 ```bash
-# Build agent image
-make docker-build
-
-# Build with specific version
-VERSION=v1.0.0 make docker-build
-
-# Push to registry
-make docker-push
+go test ./...
 ```
-
-### Code Formatting
-
-```bash
-make fmt
-make vet
-make lint
-```
-
-## Project Structure
-
-```
-k8s-exposer/
-├── cmd/
-│   ├── server/main.go        # Server entry point
-│   └── agent/main.go         # Agent entry point
-├── internal/
-│   ├── protocol/             # Communication protocol
-│   │   ├── messages.go       # Message encoding/decoding
-│   │   └── connection.go     # Connection management
-│   ├── server/               # Server components
-│   │   ├── listener.go       # Port listeners
-│   │   ├── forwarder.go      # Traffic forwarder
-│   │   └── registry.go       # Service registry
-│   └── agent/                # Agent components
-│       ├── watcher.go        # K8s service watcher
-│       ├── client.go         # Server client
-│       └── discovery.go      # Service discovery
-├── pkg/
-│   └── types/service.go      # Shared types
-├── deploy/
-│   ├── kubernetes/           # K8s manifests
-│   │   ├── agent.yaml
-│   │   ├── rbac.yaml
-│   │   └── configmap.yaml
-│   └── systemd/              # Systemd service
-│       └── k8s-exposer.service
-├── configs/
-│   └── .env.example          # Environment configuration
-├── Dockerfile.agent          # Agent Dockerfile
-├── Dockerfile.server         # Server Dockerfile
-├── Makefile                  # Build automation
-└── README.md                 # This file
-```
-
-## Security Considerations
-
-- The agent has read-only access to Kubernetes services
-- All communication is over a secure Wireguard VPN
-- The server runs with minimal privileges (systemd hardening)
-- Input validation on all annotations
-- No sensitive data is logged
-
-## Future Enhancements
-
-- [ ] TLS support for agent-server communication
-- [ ] Authentication/authorization for agents
-- [ ] Metrics and monitoring (Prometheus)
-- [ ] Rate limiting
-- [ ] Health checks and readiness probes
-- [ ] Support for multiple agents
-- [ ] Web UI for management
-- [ ] Automatic DNS record creation
-
-## Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Run `make lint` and `make test`
-6. Submit a pull request
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT
 
-## Support
+## Author
 
-For issues, questions, or contributions, please open an issue on GitHub:
-https://github.com/noahjeana/k8s-exposer/issues
+Noah Jeana - [github.com/noahjeana](https://github.com/noahjeana)

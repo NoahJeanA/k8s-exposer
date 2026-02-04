@@ -56,6 +56,24 @@ func (c *ServerClient) SendUpdate(services []types.ExposedService) error {
 	}
 
 	c.logger.Info("Sending service update", "count", len(services))
+	
+	// Debug: Log the service data
+	if len(services) > 0 {
+		for _, svc := range services {
+			c.logger.Info("Service details", 
+				"name", svc.Name,
+				"subdomain", svc.Subdomain,
+				"target_ip", svc.TargetIP,
+				"ports", len(svc.Ports))
+			for i, port := range svc.Ports {
+				c.logger.Info("Port mapping",
+					"index", i,
+					"port", port.Port,
+					"target_port", port.TargetPort,
+					"protocol", port.Protocol)
+			}
+		}
+	}
 
 	if err := c.conn.Send(msg); err != nil {
 		return fmt.Errorf("failed to send update: %w", err)

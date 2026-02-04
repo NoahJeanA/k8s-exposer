@@ -11,14 +11,15 @@ type ExposedService struct {
 	Namespace string        `json:"namespace"`
 	Subdomain string        `json:"subdomain"`  // From annotation: expose.neverup.at/subdomain
 	Ports     []PortMapping `json:"ports"`      // From annotation: expose.neverup.at/ports
-	TargetIP  string        `json:"target_ip"`  // K8s ClusterIP
+	TargetIP  string        `json:"target_ip"`  // K8s ClusterIP or Node IP
 	NodeIP    string        `json:"node_ip"`    // For NodePort fallback
 }
 
 // PortMapping defines a port and protocol to expose
 type PortMapping struct {
-	Port     int32  `json:"port"`
-	Protocol string `json:"protocol"` // "tcp", "udp", or "tcp+udp"
+	Port       int32  `json:"port"`        // Port to expose externally
+	TargetPort int32  `json:"target_port"` // Internal target port
+	Protocol   string `json:"protocol"`    // "tcp", "udp", or "tcp+udp"
 }
 
 // MessageType defines the type of message sent between agent and server

@@ -1,0 +1,51 @@
+---
+# Simple Hello World App for testing k8s-exposer
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  namespace: default
+  labels:
+    app: whoami
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whoami
+  template:
+    metadata:
+      labels:
+        app: whoami
+    spec:
+      containers:
+      - name: whoami
+        image: traefik/whoami:latest
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  namespace: default
+  annotations:
+    # k8s-exposer annotations
+    expose.neverup.at/subdomain: "whoami"
+    expose.neverup.at/ports: "8083/tcp"
+spec:
+  type: ClusterIP
+  selector:
+    app: whoami
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
