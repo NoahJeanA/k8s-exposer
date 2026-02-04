@@ -43,6 +43,15 @@ func NewForwarder(wireguardInterface string, logger *slog.Logger) *Forwarder {
 func (f *Forwarder) ForwardTCP(client net.Conn, targetIP string, targetPort int32) error {
 	defer client.Close()
 
+	// Enable TCP keepalive on client connection
+	if tcpConn, ok := client.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+		// Disable deadlines for long uploads
+		tcpConn.SetReadDeadline(time.Time{})
+		tcpConn.SetWriteDeadline(time.Time{})
+	}
+
 	// Dial target via Wireguard interface
 	target, err := f.dialViaWireguard("tcp", fmt.Sprintf("%s:%d", targetIP, targetPort))
 	if err != nil {
@@ -50,20 +59,31 @@ func (f *Forwarder) ForwardTCP(client net.Conn, targetIP string, targetPort int3
 	}
 	defer target.Close()
 
+	// Enable TCP keepalive on target connection
+	if tcpConn, ok := target.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+		// Disable deadlines for long uploads
+		tcpConn.SetReadDeadline(time.Time{})
+		tcpConn.SetWriteDeadline(time.Time{})
+	}
+
 	f.logger.Debug("TCP connection established", "target", fmt.Sprintf("%s:%d", targetIP, targetPort))
 
-	// Bidirectional copy
+	// Bidirectional copy with larger buffer
 	errCh := make(chan error, 2)
+	buf1 := make([]byte, 128*1024) // 128KB buffer
+	buf2 := make([]byte, 128*1024) // 128KB buffer
 
 	// Client -> Target
 	go func() {
-		_, err := io.Copy(target, client)
+		_, err := io.CopyBuffer(target, client, buf1)
 		errCh <- err
 	}()
 
 	// Target -> Client
 	go func() {
-		_, err := io.Copy(client, target)
+		_, err := io.CopyBuffer(client, target, buf2)
 		errCh <- err
 	}()
 
