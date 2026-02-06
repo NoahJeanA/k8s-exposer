@@ -73,18 +73,18 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$HETZNER_HOST" >> ~/.ssh/known_hosts 2>&1
+          ssh-keyscan -p 51200 -H "$HETZNER_HOST" >> ~/.ssh/known_hosts 2>&1
           
           # Test SSH connection
-          ssh -o BatchMode=yes -o ConnectTimeout=10 root@"$HETZNER_HOST" "echo 'SSH connection successful'"
+          ssh -p 51200 -o BatchMode=yes -o ConnectTimeout=10 root@"$HETZNER_HOST" "echo 'SSH connection successful'"
 
           # Deploy binary
           chmod +x k8s-exposer-server
-          scp -v k8s-exposer-server root@"$HETZNER_HOST":/usr/local/bin/k8s-exposer-server
+          scp -P 51200 k8s-exposer-server root@"$HETZNER_HOST":/usr/local/bin/k8s-exposer-server
 
           # Copy service file and restart
-          scp deploy/systemd/k8s-exposer.service root@"$HETZNER_HOST":/etc/systemd/system/
-          ssh root@"$HETZNER_HOST" "systemctl daemon-reload && systemctl restart k8s-exposer"
+          scp -P 51200 deploy/systemd/k8s-exposer.service root@"$HETZNER_HOST":/etc/systemd/system/
+          ssh -p 51200 root@"$HETZNER_HOST" "systemctl daemon-reload && systemctl restart k8s-exposer"
 
           # Cleanup
           rm -f ~/.ssh/id_rsa
