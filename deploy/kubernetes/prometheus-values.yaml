@@ -1,0 +1,35 @@
+# Prometheus Stack Helm Values
+# Deployed automatically via k8s-deployer
+
+grafana:
+  # Enable anonymous access for dashboard sidecar
+  grafana.ini:
+    analytics:
+      check_for_updates: true
+    grafana_net:
+      url: https://grafana.net
+    log:
+      mode: console
+    paths:
+      data: /var/lib/grafana/
+      logs: /var/log/grafana
+      plugins: /var/lib/grafana/plugins
+      provisioning: /etc/grafana/provisioning
+    server:
+      domain: ''
+    auth.anonymous:
+      enabled: true
+      org_role: Admin
+      org_name: Main Org.
+    auth.basic:
+      enabled: true
+  
+  # Sidecar configuration
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      folder: /tmp/dashboards
+      provider:
+        foldersFromFilesStructure: false
