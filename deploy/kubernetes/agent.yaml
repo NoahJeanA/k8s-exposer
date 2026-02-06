@@ -16,7 +16,7 @@ spec:
       serviceAccountName: k8s-exposer-agent
       containers:
       - name: agent
-        image: ghcr.io/noahjeana/k8s-exposer-agent:latest
+        image: noahjeana/k8s-exposer-agent:latest
         imagePullPolicy: Always
         env:
         - name: SERVER_ADDR
