@@ -1,0 +1,388 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-k8s-exposer
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  k8s-exposer-server.json: |-
+    {
+      "uid": "k8s-exposer-server",
+      "title": "K8s Exposer - Server Metrics",
+      "tags": ["k8s-exposer", "networking", "server"],
+      "timezone": "Europe/Vienna",
+      "refresh": "30s",
+      "editable": true,
+      "schemaVersion": 38,
+      "version": 1,
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "value_and_name",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "k8s_exposer_services_total{job=\"k8s-exposer-server\"}",
+            "refId": "A"
+          }],
+          "title": "Total Services",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "blue", "value": null}]
+              }
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "value_and_name",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "k8s_exposer_ports_total{job=\"k8s-exposer-server\"}",
+            "refId": "A"
+          }],
+          "title": "Total Ports",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {"0": {"color": "green", "text": "Healthy", "index": 0}}
+                },
+                {
+                  "type": "range",
+                  "options": {
+                    "from": 1,
+                    "to": 9999,
+                    "result": {"color": "red", "text": "Errors", "index": 1}
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "id": 3,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "k8s_exposer_reconciliation_errors_total{job=\"k8s-exposer-server\"}",
+            "refId": "A"
+          }],
+          "title": "Reconciliation Errors",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "unit": "dateTimeFromNow",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "text", "value": null}]
+              }
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+          "id": 4,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "k8s_exposer_last_reconciliation_timestamp_seconds{job=\"k8s-exposer-server\"} * 1000",
+            "refId": "A"
+          }],
+          "title": "Last Reconciliation",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisPlacement": "auto",
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2,
+                "showPoints": "never"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Services"},
+                "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Ports"},
+                "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "id": 5,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": ["last", "mean"]
+            },
+            "tooltip": {"mode": "single", "sort": "none"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+              "expr": "k8s_exposer_services_total{job=\"k8s-exposer-server\"}",
+              "legendFormat": "Services",
+              "refId": "A"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+              "expr": "k8s_exposer_ports_total{job=\"k8s-exposer-server\"}",
+              "legendFormat": "Ports",
+              "refId": "B"
+            }
+          ],
+          "title": "Services & Ports Over Time",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "showPoints": "never"
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "id": 6,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": ["last", "mean"]
+            }
+          },
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "rate(k8s_exposer_reconciliations_total{job=\"k8s-exposer-server\"}[5m])",
+            "legendFormat": "Reconciliations/sec",
+            "refId": "A"
+          }],
+          "title": "Reconciliation Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+          "id": 7,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": ["last", "max"]
+            }
+          },
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "rate(process_cpu_seconds_total{job=\"k8s-exposer-server\"}[5m]) * 100",
+            "legendFormat": "CPU %",
+            "refId": "A"
+          }],
+          "title": "Server CPU Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              },
+              "unit": "bytes"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+          "id": 8,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": ["last", "max"]
+            }
+          },
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "process_resident_memory_bytes{job=\"k8s-exposer-server\"}",
+            "legendFormat": "Memory",
+            "refId": "A"
+          }],
+          "title": "Server Memory Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+          "id": 9,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": ["last", "max"]
+            }
+          },
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "go_goroutines{job=\"k8s-exposer-server\"}",
+            "legendFormat": "Goroutines",
+            "refId": "A"
+          }],
+          "title": "Active Goroutines",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+          "id": 10,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [{
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "expr": "time() - process_start_time_seconds{job=\"k8s-exposer-server\"}",
+            "refId": "A"
+          }],
+          "title": "Uptime",
+          "type": "stat"
+        }
+      ]
+    }
