@@ -1,7 +1,6 @@
 [Unit]
 Description=K8s Service Exposer
-After=network.target wg-quick@wg0.service
-Requires=wg-quick@wg0.service
+After=network.target
 Documentation=https://github.com/noahjeana/k8s-exposer
 
 [Service]
