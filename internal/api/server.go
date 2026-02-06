@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/noahjeana/k8s-exposer/internal/automation"
 	"github.com/noahjeana/k8s-exposer/internal/server"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Server provides HTTP API for management and monitoring
@@ -65,15 +67,41 @@ func (s *Server) setupRoutes() {
 	// Legacy routes (backwards compatibility)
 	r.Get("/health", s.handleHealth)
 	r.Get("/services", s.handleListServices)
+
+	// Prometheus metrics endpoint (standard path)
+	r.Handle("/metrics", promhttp.Handler())
 }
 
 // Start starts the HTTP server
 func (s *Server) Start(addr string) error {
 	s.logger.Info("Starting API server", "addr", addr)
+	
+	// Start background goroutine to update service metrics
+	go s.updateServiceMetrics()
+	
 	return http.ListenAndServe(addr, s.router)
 }
 
-// loggingMiddleware logs HTTP requests
+// updateServiceMetrics periodically updates Prometheus service gauges
+func (s *Server) updateServiceMetrics() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		services := s.registry.GetServices()
+		servicesTotal.Set(float64(len(services)))
+		
+		totalPorts := 0
+		for _, svc := range services {
+			totalPorts += len(svc.Ports)
+		}
+		portsTotal.Set(float64(totalPorts))
+		
+		<-ticker.C
+	}
+}
+
+// loggingMiddleware logs HTTP requests and records metrics
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -83,13 +111,21 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 		
 		next.ServeHTTP(ww, r)
 		
+		duration := time.Since(start)
+		
 		s.logger.Info("API request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", ww.statusCode,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", duration.Milliseconds(),
 			"remote", r.RemoteAddr,
 		)
+
+		// Record Prometheus metrics (skip /metrics endpoint itself)
+		if r.URL.Path != "/metrics" {
+			httpRequestsTotal.WithLabelValues(r.Method, r.URL.Path, fmt.Sprintf("%d", ww.statusCode)).Inc()
+			httpRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration.Seconds())
+		}
 	})
 }
 
