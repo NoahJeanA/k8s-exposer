@@ -68,15 +68,19 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.HETZNER_SSH_KEY }}
           HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
         run: |
+          set -x
           # Setup SSH
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$HETZNER_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$HETZNER_HOST" >> ~/.ssh/known_hosts 2>&1
+          
+          # Test SSH connection
+          ssh -o BatchMode=yes -o ConnectTimeout=10 root@"$HETZNER_HOST" "echo 'SSH connection successful'"
 
           # Deploy binary
           chmod +x k8s-exposer-server
-          scp k8s-exposer-server root@"$HETZNER_HOST":/usr/local/bin/k8s-exposer-server
+          scp -v k8s-exposer-server root@"$HETZNER_HOST":/usr/local/bin/k8s-exposer-server
 
           # Copy service file and restart
           scp deploy/systemd/k8s-exposer.service root@"$HETZNER_HOST":/etc/systemd/system/
