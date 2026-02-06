@@ -1,0 +1,14 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /build
+COPY cmd/internal-services-exporter/main.go .
+COPY go.mod go.sum ./
+
+RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o internal-services-exporter main.go
+
+FROM scratch
+COPY --from=builder /build/internal-services-exporter /internal-services-exporter
+
+EXPOSE 9092
+ENTRYPOINT ["/internal-services-exporter"]

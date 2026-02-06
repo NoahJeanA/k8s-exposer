@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: internal-services-exporter-script
+  namespace: internal-ingress
+data:
+  exporter.py: |
+    #!/usr/bin/env python3
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    
+    SERVICES = [
+        {"domain": "grafana.internal.neverup.at", "service": "kube-prometheus-stack-grafana", "namespace": "monitoring", "port": "80"},
+        {"domain": "prometheus.internal.neverup.at", "service": "kube-prometheus-stack-prometheus", "namespace": "monitoring", "port": "9090"},
+        {"domain": "authentik.internal.neverup.at", "service": "authentik-server", "namespace": "authentik", "port": "80"},
+        {"domain": "loki.internal.neverup.at", "service": "loki", "namespace": "monitoring", "port": "3100"},
+        {"domain": "wiki.internal.neverup.at", "service": "mkdocs", "namespace": "docs", "port": "80"},
+        {"domain": "git.internal.neverup.at", "service": "forgejo-http", "namespace": "forgejo", "port": "3000"},
+    ]
+    
+    class MetricsHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/metrics':
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain; version=0.0.4')
+                self.end_headers()
+                
+                output = []
+                output.append('# HELP internal_service_info Information about internal services (*.internal.neverup.at)')
+                output.append('# TYPE internal_service_info gauge')
+                
+                for svc in SERVICES:
+                    line = f'internal_service_info{{domain="{svc["domain"]}",service="{svc["service"]}",namespace="{svc["namespace"]}",port="{svc["port"]}"}} 1'
+                    output.append(line)
+                
+                self.wfile.write('\n'.join(output).encode() + b'\n')
+            else:
+                self.send_response(404)
+                self.end_headers()
+        
+        def log_message(self, format, *args):
+            pass  # Suppress logs
+    
+    if __name__ == '__main__':
+        server = HTTPServer(('0.0.0.0', 9092), MetricsHandler)
+        print('Internal Services Exporter listening on :9092')
+        server.serve_forever()
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: internal-services-exporter
+  namespace: internal-ingress
+  labels:
+    app: internal-services-exporter
+spec:
+  containers:
+  - name: exporter
+    image: python:3.11-alpine
+    command: ["python3", "/app/exporter.py"]
+    ports:
+    - containerPort: 9092
+      name: metrics
+    volumeMounts:
+    - name: script
+      mountPath: /app
+    resources:
+      requests:
+        cpu: 10m
+        memory: 20Mi
+      limits:
+        cpu: 50m
+        memory: 50Mi
+  volumes:
+  - name: script
+    configMap:
+      name: internal-services-exporter-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: internal-services-exporter
+  namespace: internal-ingress
+  labels:
+    app: internal-services-exporter
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9092
+    targetPort: 9092
+    protocol: TCP
+    name: metrics
+  selector:
+    app: internal-services-exporter
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: internal-services-exporter
+  namespace: internal-ingress
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: internal-services-exporter
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
