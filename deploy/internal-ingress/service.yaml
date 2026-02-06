@@ -4,10 +4,11 @@ metadata:
   name: nginx
   namespace: internal-ingress
 spec:
-  type: ClusterIP
+  type: NodePort
   selector:
     app: nginx
   ports:
   - name: http
     port: 80
     targetPort: 80
+    nodePort: 30080
