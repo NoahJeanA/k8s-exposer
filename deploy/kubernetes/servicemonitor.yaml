@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: k8s-exposer-server
+  namespace: monitoring
+  labels:
+    app: k8s-exposer-server
+subsets:
+  - addresses:
+      - ip: 10.0.0.1  # WireGuard IP of the Hetzner server
+    ports:
+      - name: metrics
+        port: 8090
+        protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-exposer-server
+  namespace: monitoring
+  labels:
+    app: k8s-exposer-server
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: metrics
+      port: 8090
+      targetPort: 8090
+      protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: k8s-exposer-server
+  namespace: monitoring
+  labels:
+    app: k8s-exposer-server
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: k8s-exposer-server
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
