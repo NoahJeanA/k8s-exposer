@@ -20,7 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/k8s-exposer
+ReadWritePaths=/var/lib/k8s-exposer /etc/haproxy
 
 [Install]
 WantedBy=multi-user.target
