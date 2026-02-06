@@ -156,13 +156,34 @@ func (c *Controller) Run(ctx context.Context, serviceGetter func() []types.Expos
 		"firewall_enabled", c.firewallClient.Enabled(),
 	)
 
-	// Validate HAProxy connection
+	// Wait for HAProxy to be ready (retry with backoff)
+	for i := 0; i < 30; i++ {
+		if err := c.haproxyClient.Validate(); err != nil {
+			c.logger.Warn("HAProxy not ready, retrying...", "attempt", i+1, "error", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(i+1) * time.Second):
+				continue
+			}
+		}
+		break
+	}
+	
+	// Final validation check
 	if err := c.haproxyClient.Validate(); err != nil {
-		return fmt.Errorf("HAProxy validation failed: %w", err)
+		return fmt.Errorf("HAProxy validation failed after retries: %w", err)
 	}
 
 	ticker := time.NewTicker(c.reconcileInterval)
 	defer ticker.Stop()
+
+	// Wait a bit for agents to connect before initial reconciliation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(5 * time.Second):
+	}
 
 	// Initial reconciliation
 	services := serviceGetter()
