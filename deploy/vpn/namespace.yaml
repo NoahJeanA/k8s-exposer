@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vpn
+  labels:
+    app.kubernetes.io/name: vpn
+    app.kubernetes.io/component: wireguard

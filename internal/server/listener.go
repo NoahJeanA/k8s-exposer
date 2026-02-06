@@ -68,7 +68,8 @@ func (pl *PortListener) Start() error {
 
 // startTCP starts a TCP listener
 func (pl *PortListener) startTCP() error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", pl.port))
+	// Bind explicitly to 0.0.0.0 (IPv4) to ensure HAProxy can connect via localhost/127.0.0.1
+	listener, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", pl.port))
 	if err != nil {
 		return fmt.Errorf("failed to start TCP listener: %w", err)
 	}

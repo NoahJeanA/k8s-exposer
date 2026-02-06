@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: internal-ingress
+data:
+  nginx.conf: |
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /tmp/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent"';
+        access_log /var/log/nginx/access.log main;
+        
+        sendfile on;
+        keepalive_timeout 65;
+        client_max_body_size 100m;
+
+        # Grafana
+        server {
+            listen 80;
+            server_name grafana.internal.neverup.at;
+            
+            location / {
+                proxy_pass http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local:80;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+        }
+
+        # Prometheus
+        server {
+            listen 80;
+            server_name prometheus.internal.neverup.at;
+            
+            location / {
+                proxy_pass http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            }
+        }
+
+        # Authentik
+        server {
+            listen 80;
+            server_name authentik.internal.neverup.at;
+            
+            location / {
+                proxy_pass http://authentik-server.authentik.svc.cluster.local:80;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+
+        # Loki
+        server {
+            listen 80;
+            server_name loki.internal.neverup.at;
+            
+            location / {
+                proxy_pass http://loki.monitoring.svc.cluster.local:3100;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+            }
+        }
+
+        # Wiki (MkDocs)
+        server {
+            listen 80;
+            server_name wiki.internal.neverup.at;
+            
+            location / {
+                proxy_pass http://mkdocs.docs.svc.cluster.local:80;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+
+        # Forgejo (Git)
+        server {
+            listen 80;
+            server_name git.internal.neverup.at;
+            
+            client_max_body_size 512m;
+            
+            location / {
+                proxy_pass http://forgejo-http.forgejo.svc.cluster.local:3000;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+        }
+
+        # Default fallback
+        server {
+            listen 80 default_server;
+            server_name _;
+            
+            location / {
+                return 404 'Service not found. Available: grafana, prometheus, authentik, loki, wiki';
+                add_header Content-Type text/plain;
+            }
+        }
+    }

@@ -99,9 +99,7 @@ backend backend_{{.Port}}
     acl too_many_uploads src_conn_cur gt 3
     http-request deny deny_status 429 if too_many_uploads
     {{end}}
-    option httpchk GET /
-    http-check expect status 200-499
-    server {{.Name}} localhost:{{.Port}} check inter 5s fall 3 rise 2
+    server {{.Name}} 127.0.0.1:{{.Port}}
 {{end}}
 `
 

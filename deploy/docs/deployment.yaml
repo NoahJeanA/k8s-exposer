@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mkdocs
+  namespace: docs
+  labels:
+    app: mkdocs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mkdocs
+  template:
+    metadata:
+      labels:
+        app: mkdocs
+    spec:
+      securityContext:
+        fsGroup: 65533
+      containers:
+      - name: mkdocs
+        image: squidfunk/mkdocs-material:latest
+        command: ["mkdocs"]
+        args: ["serve", "--dev-addr=0.0.0.0:8000"]
+        ports:
+        - containerPort: 8000
+          name: http
+        workingDir: /docs/repo
+        volumeMounts:
+        - name: docs
+          mountPath: /docs
+        securityContext:
+          runAsUser: 65533
+          runAsGroup: 65533
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+      - name: git-sync
+        image: registry.k8s.io/git-sync/git-sync:v4.4.0
+        args:
+        - --repo=git@github.com:neverup-internal/wiki.git
+        - --root=/docs
+        - --link=repo
+        - --period=30s
+        - --ssh-key-file=/etc/git-secret/ssh-privatekey
+        - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+        volumeMounts:
+        - name: docs
+          mountPath: /docs
+        - name: git-ssh
+          mountPath: /etc/git-secret
+          readOnly: true
+        securityContext:
+          runAsUser: 65533
+          runAsGroup: 65533
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+
+      volumes:
+      - name: docs
+        emptyDir: {}
+      - name: git-ssh
+        secret:
+          secretName: git-ssh-key
+          defaultMode: 0400
