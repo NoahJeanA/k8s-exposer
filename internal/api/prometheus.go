@@ -34,20 +34,4 @@ var (
 		},
 		[]string{"method", "path"},
 	)
-
-	// Reconciliation metrics
-	reconciliationsTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "k8s_exposer_reconciliations_total",
-		Help: "Total number of reconciliation runs",
-	})
-
-	reconciliationErrors = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "k8s_exposer_reconciliation_errors_total",
-		Help: "Total number of reconciliation errors",
-	})
-
-	lastReconciliationTime = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "k8s_exposer_last_reconciliation_timestamp_seconds",
-		Help: "Unix timestamp of last reconciliation",
-	})
 )

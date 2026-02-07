@@ -9,6 +9,25 @@ import (
 	"github.com/noahjeana/k8s-exposer/internal/automation/firewall"
 	"github.com/noahjeana/k8s-exposer/internal/automation/haproxy"
 	"github.com/noahjeana/k8s-exposer/pkg/types"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	reconciliationsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "k8s_exposer_reconciliations_total",
+		Help: "Total number of reconciliation runs",
+	})
+
+	reconciliationErrors = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "k8s_exposer_reconciliation_errors_total",
+		Help: "Total number of reconciliation errors",
+	})
+
+	lastReconciliationTime = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "k8s_exposer_last_reconciliation_timestamp_seconds",
+		Help: "Unix timestamp of last reconciliation",
+	})
 )
 
 // Controller manages HAProxy and firewall automation
@@ -81,6 +100,7 @@ func (c *Controller) Reconcile(services []types.ExposedService) error {
 	// Update HAProxy configuration
 	if err := c.reconcileHAProxy(desiredMappings, backendConfigs); err != nil {
 		c.logger.Error("Failed to reconcile HAProxy", "error", err)
+		reconciliationErrors.Inc()
 		return err
 	}
 
@@ -91,6 +111,11 @@ func (c *Controller) Reconcile(services []types.ExposedService) error {
 	}
 
 	c.logger.Info("Reconciliation complete", "domains", len(desiredMappings), "ports", len(desiredPorts))
+	
+	// Record successful reconciliation
+	reconciliationsTotal.Inc()
+	lastReconciliationTime.SetToCurrentTime()
+	
 	return nil
 }
 
